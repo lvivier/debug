@@ -6,6 +6,11 @@
 module.exports = debug;
 
 /**
+ * Does this console support styles?
+ */
+var styles = !!(window.chrome || (console.exception && console.table));
+
+/**
  * Create a debugger with the given `name`.
  *
  * @param {String} name
@@ -15,8 +20,33 @@ module.exports = debug;
 
 function debug(name) {
   if (!debug.enabled(name)) return function(){};
+  var c = color();
 
-  return function(fmt){
+  return styles ? colored : plain;
+
+  function colored(fmt){
+    fmt = coerce(fmt);
+
+    var subs = countsubs(fmt);
+    var curr = new Date;
+    var ms = curr - (debug[name] || curr);
+    debug[name] = curr;
+
+    fmt = '%c' + name + ' %c'
+        + fmt + ' %c+' + debug.humanize(ms);
+
+    // build args with color substitutions
+    var args = [fmt, c, 'color:black']
+      .concat([].slice.call(arguments, 1, subs+1))
+      .concat([c])
+      .concat([].slice.call(arguments, subs+1));
+
+    // This hackery is required for IE8
+    // where `console.log` doesn't have 'apply'
+    log(args);
+  }
+
+  function plain(fmt){
     fmt = coerce(fmt);
 
     var curr = new Date;
@@ -28,12 +58,35 @@ function debug(name) {
       + fmt
       + ' +' + debug.humanize(ms);
 
-    // This hackery is required for IE8
-    // where `console.log` doesn't have 'apply'
+    log(arguments);
+  }
+
+  // This hackery is required for IE8
+  // where `console.log` doesn't have 'apply'
+  function log(args){
     window.console
       && console.log
-      && Function.prototype.apply.call(console.log, console, arguments);
+      && Function.prototype.apply.call(console.log, console, args);
   }
+}
+
+/**
+ * Browser colors.
+ */
+var colors = ['#4DD9ED', '#95E346', '#E3DB7D', '#0000AE', '#B180FB', '#FF266F'];
+
+/**
+ * Previously assigned color.
+ */
+
+var prevColor = 0;
+
+/**
+ * Select a color.
+ */
+
+function color() {
+  return 'color:'+colors[prevColor++ % colors.length];
 }
 
 /**
@@ -128,6 +181,14 @@ debug.enabled = function(name) {
 function coerce(val) {
   if (val instanceof Error) return val.stack || val.message;
   return val;
+}
+
+/**
+ * Count substitutions in a string.
+ */
+
+function countsubs(msg){
+  return ((msg).match(/(%[sdiocf])/mg)||[]).length;
 }
 
 // persist
